@@ -1,56 +1,57 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:image_picker/image_picker.dart';
+import 'models/moodboard.dart';
+import 'screens/moodboard_detail_screen.dart';
+import 'services/api_service.dart';
 
 void main() {
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Filmtool',
+      title: 'Film Production Tool',
       theme: ThemeData(
-        primarySwatch: Colors.deepPurple,
+        primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
-        scaffoldBackgroundColor: const Color(0xFFF7F7F7),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
-          elevation: 1,
-          iconTheme: IconThemeData(color: Colors.black),
-          titleTextStyle: TextStyle(color: Colors.black, fontSize: 16),
-        ),
-        tabBarTheme: const TabBarThemeData(
-          labelColor: Colors.black,
-          unselectedLabelColor: Colors.grey,
-          indicator: UnderlineTabIndicator(
-            borderSide: BorderSide(color: Colors.deepPurple, width: 2),
-          ),
-        ),
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: MainScreen(),
+      home: const MyHomePage(),
     );
   }
 }
 
-class MainScreen extends StatefulWidget {
-  const MainScreen({super.key});
+class MyHomePage extends StatefulWidget {
+  const MyHomePage({Key? key}) : super(key: key);
 
   @override
-  State<MainScreen> createState() => _MainScreenState();
+  State<MyHomePage> createState() => _MyHomePageState();
 }
 
-class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateMixin {
+class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final GlobalKey<_MoodboardListScreenState> _moodboardKey = GlobalKey();
+  final ApiService _apiService = ApiService();
+  late Future<List<Moodboard>> _moodboards;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _loadMoodboards();
+  }
+
+  Future<void> _loadMoodboards() async {
+    setState(() {
+      _moodboards = _apiService.getMoodboards();
+    });
   }
 
   @override
@@ -59,77 +60,13 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
     super.dispose();
   }
 
-  void _handleAddNew() {
-    if (_tabController.index == 0) {
-      // Show dialog to add a new Moodboard
-      _showAddMoodboardDialog();
-    }
-    // Add logic for other tabs here later
-  }
-
-  Future<void> _showAddMoodboardDialog() async {
-    final titleController = TextEditingController();
-    final descriptionController = TextEditingController();
-
-    return showDialog<void>(
+  void _showAddMoodboardDialog() {
+    showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Add New Moodboard'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(labelText: 'Title'),
-              ),
-              TextField(
-                controller: descriptionController,
-                decoration: const InputDecoration(labelText: 'Description'),
-              ),
-            ],
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            ElevatedButton(
-              child: const Text('Create'),
-              onPressed: () async {
-                final title = titleController.text;
-                if (title.isNotEmpty) {
-                  try {
-                    final response = await http.post(
-                      Uri.parse('http://localhost:8080/api/moodboards'),
-                      headers: {'Content-Type': 'application/json; charset=UTF-8'},
-                      body: jsonEncode({
-                        'title': title,
-                        'description': descriptionController.text,
-                      }),
-                    );
-                    if (response.statusCode >= 200 && response.statusCode < 300) {
-                      if (!mounted) return;
-                      Navigator.of(context).pop();
-                      _moodboardKey.currentState?.refreshMoodboards();
-                    } else {
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Failed to create: ${response.body}')),
-                      );
-                    }
-                  } catch (e) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('An error occurred: $e')),
-                    );
-                  }
-                }
-              },
-            ),
-          ],
+      builder: (context) {
+        return AddMoodboardDialog(
+            apiService: _apiService,
+            onMoodboardCreated: _loadMoodboards,
         );
       },
     );
@@ -139,7 +76,7 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('The Girl and t...'),
+        title: const Text('Film Production Tool'),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -148,152 +85,246 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
             Tab(text: 'Shot List'),
           ],
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: ElevatedButton.icon(
-              onPressed: _handleAddNew,
-              icon: const Icon(Icons.add),
-              label: const Text('Add New'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepPurple,
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ),
-          IconButton(icon: const Icon(Icons.more_horiz), onPressed: () {}),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8.0),
-            child: CircleAvatar(backgroundColor: Colors.black),
-          ),
-        ],
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
-          MoodboardListScreen(key: _moodboardKey),
-          const PlaceholderWidget(title: 'Storyboards'),
-          const PlaceholderWidget(title: 'Shot List'),
+          MoodboardListScreen(moodboards: _moodboards, onRefresh: _loadMoodboards),
+          const Center(child: Text('Storyboards Coming Soon')),
+          const Center(child: Text('Shot List Coming Soon')),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _showAddMoodboardDialog,
+        label: const Text('Add New'),
+        icon: const Icon(Icons.add),
       ),
     );
   }
 }
 
-class MoodboardListScreen extends StatefulWidget {
-  const MoodboardListScreen({super.key});
+class MoodboardListScreen extends StatelessWidget {
+  final Future<List<Moodboard>> moodboards;
+  final Future<void> Function() onRefresh;
 
-  @override
-  _MoodboardListScreenState createState() => _MoodboardListScreenState();
-}
-
-class _MoodboardListScreenState extends State<MoodboardListScreen> {
-  late Future<List<Moodboard>> _moodboardsFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    refreshMoodboards();
-  }
-
-  void refreshMoodboards() {
-    setState(() {
-      _moodboardsFuture = fetchMoodboards();
-    });
-  }
-
-  Future<List<Moodboard>> fetchMoodboards() async {
-    final response = await http.get(Uri.parse('http://localhost:8080/api/moodboards'));
-
-    if (response.statusCode == 200) {
-      List jsonResponse = json.decode(utf8.decode(response.bodyBytes));
-      return jsonResponse.map((data) => Moodboard.fromJson(data)).toList();
-    } else {
-      throw Exception('Failed to load moodboards. Status: ${response.statusCode}');
-    }
-  }
+  const MoodboardListScreen({
+    Key? key,
+    required this.moodboards,
+    required this.onRefresh,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Moodboard>>(
-      future: _moodboardsFuture,
+      future: moodboards,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         } else if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
+          return Center(child: Text("Error: ${snapshot.error}"));
         } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const Center(child: Text('No moodboards yet. Use the "Add New" button!'));
-        } else {
-          return GridView.builder(
-            padding: const EdgeInsets.all(16.0),
+          return const Center(child: Text("No moodboards yet."));
+        }
+
+        return RefreshIndicator(
+          onRefresh: onRefresh,
+          child: GridView.builder(
+            padding: const EdgeInsets.all(8.0),
             gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 300,
-              childAspectRatio: 1.2,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
+              maxCrossAxisExtent: 200,
+              childAspectRatio: 3 / 4,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
             ),
             itemCount: snapshot.data!.length,
             itemBuilder: (context, index) {
-              return Card(
-                clipBehavior: Clip.antiAlias,
-                elevation: 2,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: Container(
-                        color: Colors.grey[300],
-                        child: const Center(child: Icon(Icons.image, size: 50, color: Colors.grey)),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Text(
-                        snapshot.data![index].title,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              );
+              return MoodboardCard(moodboard: snapshot.data![index]);
             },
-          );
-        }
+          ),
+        );
       },
     );
   }
 }
 
-class PlaceholderWidget extends StatelessWidget {
-  final String title;
-  const PlaceholderWidget({super.key, required this.title});
+class AddMoodboardDialog extends StatefulWidget {
+  final ApiService apiService;
+  final Future<void> Function() onMoodboardCreated;
+
+  const AddMoodboardDialog({
+    Key? key,
+    required this.apiService,
+    required this.onMoodboardCreated,
+  }) : super(key: key);
+
+  @override
+  _AddMoodboardDialogState createState() => _AddMoodboardDialogState();
+}
+
+class _AddMoodboardDialogState extends State<AddMoodboardDialog> {
+  final _titleController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  XFile? _selectedImage;
+  bool _isLoading = false;
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      setState(() {
+        _selectedImage = pickedFile;
+      });
+    }
+  }
+
+  Future<void> _createMoodboard() async {
+    if (_titleController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Title cannot be empty.')),
+      );
+      return;
+    }
+
+    setState(() { _isLoading = true; });
+
+    try {
+      Moodboard newMoodboard = await widget.apiService.createMoodboard(
+        _titleController.text,
+        _descriptionController.text,
+      );
+
+      if (_selectedImage != null) {
+        await widget.apiService.uploadCoverImage(newMoodboard.id, _selectedImage!);
+      }
+
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      widget.onMoodboardCreated();
+
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to create moodboard: $e')),
+      );
+    } finally {
+       if (mounted) {
+         setState(() { _isLoading = false; });
+       }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        title,
-        style: Theme.of(context).textTheme.headlineMedium,
+    return AlertDialog(
+      title: const Text('Add New Moodboard'),
+      content: SingleChildScrollView(
+        child: ListBody(
+          children: <Widget>[
+            TextField(
+              controller: _titleController,
+              decoration: const InputDecoration(hintText: "Title"),
+              enabled: !_isLoading,
+            ),
+            TextField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(hintText: "Description"),
+               enabled: !_isLoading,
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: _isLoading ? null : _pickImage,
+              icon: const Icon(Icons.image),
+              label: const Text('Select Cover Image'),
+            ),
+            if (_selectedImage != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(
+                  'Selected: ${_selectedImage!.name}',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            if(_isLoading)
+              const Padding(
+                padding: EdgeInsets.only(top: 16.0),
+                child: Center(child: CircularProgressIndicator()),
+              )
+          ],
+        ),
       ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isLoading ? null : _createMoodboard,
+          child: const Text('Create'),
+        ),
+      ],
     );
   }
 }
 
-class Moodboard {
-  final int id;
-  final String title;
-  final String? description;
+class MoodboardCard extends StatelessWidget {
+  final Moodboard moodboard;
+  final String apiBaseUrl = "http://localhost:8080";
 
-  Moodboard({required this.id, required this.title, this.description});
+  const MoodboardCard({Key? key, required this.moodboard}) : super(key: key);
 
-  factory Moodboard.fromJson(Map<String, dynamic> json) {
-    return Moodboard(
-      id: json['id'],
-      title: json['title'],
-      description: json['description'],
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MoodboardDetailScreen(moodboardId: moodboard.id),
+          ),
+        );
+      },
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: (moodboard.coverImageUrl != null && moodboard.coverImageUrl!.isNotEmpty)
+                  ? Image.network(
+                      '$apiBaseUrl${moodboard.coverImageUrl}',
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(Icons.broken_image, size: 48, color: Colors.grey);
+                      },
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Center(
+                          child: CircularProgressIndicator(
+                            value: loadingProgress.expectedTotalBytes != null
+                                ? loadingProgress.cumulativeBytesLoaded /
+                                    loadingProgress.expectedTotalBytes!
+                                : null,
+                          ),
+                        );
+                      },
+                    )
+                  : Container(
+                      color: Colors.grey[200],
+                      child: const Icon(Icons.photo_album, size: 48, color: Colors.grey),
+                    ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Text(
+                moodboard.title,
+                style: Theme.of(context).textTheme.titleMedium,
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
